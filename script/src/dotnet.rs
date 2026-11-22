@@ -88,8 +88,11 @@ fn with_separator(prefix: &[&str], args: &[&str]) -> Command {
     build(all)
 }
 
-/// Writes `script` to a fresh private `.cs` file in a temporary directory and
+/// Writes `script` to a fresh private `.cs` file in the user's directory and
 /// builds the `.cs` file form.
+///
+/// On Windows privacy relies on the per-user `LocalAppData` directory and reparse-point refusal,
+/// not a custom ACL.
 ///
 /// The file is left in place, and the path is recorded on the command for [`Command::temp_file`].
 ///

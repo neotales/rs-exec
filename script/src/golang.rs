@@ -59,8 +59,11 @@ pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command 
     build(all)
 }
 
-/// Writes `script` to a fresh private file in a temporary directory and builds
+/// Writes `script` to a fresh private file in the user's directory and builds
 /// `go run <file> <args>`.
+///
+/// On Windows privacy relies on the per-user `LocalAppData` directory and reparse-point refusal,
+/// not a custom ACL.
 ///
 /// The file is left in place, matching the reference implementation, and the path is recorded on
 /// the command for [`Command::temp_file`].

@@ -83,6 +83,8 @@ fn golang_inline_writes_a_temporary_file() {
     let command = golang::inline("package main", []).expect("inline Go");
 
     let temp = command.temp_file().expect("temp file");
+    #[cfg(unix)]
+    assert!(temp.starts_with(std::env::var_os("HOME").unwrap()));
     assert!(temp.to_string_lossy().ends_with(".go"));
     assert_eq!(
         args(&command),

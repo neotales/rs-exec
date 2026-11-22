@@ -58,8 +58,10 @@ assert_eq!(output.text().trim(), "hi");
 ```
 
 **Run inline Go and .NET source.** `golang::inline` and `dotnet::inline` write the source to a
-fresh private file in the temporary directory, then run it. The command records the path, and
+fresh private file in the user's directory, then run it. The command records the path, and
 the file stays there.
+
+On Windows, privacy relies on the per-user `LocalAppData` directory and reparse-point refusal, not a custom ACL.
 
 ```rust
 use neotales_script::{dotnet, golang};
@@ -79,5 +81,3 @@ name.
 ## Licence
 
 [MIT](../LICENSE.md)
-
-On Windows, privacy relies on the per-user temporary directory and reparse-point refusal, not a custom ACL.

@@ -32,6 +32,9 @@ pub(crate) fn script_file<'a>(text: &'a str, extensions: &[&str]) -> Option<&'a 
 }
 
 /// Writes a fresh private script file and leaves it on disk.
+///
+/// On Windows privacy relies on the per-user `LocalAppData` directory and reparse-point refusal,
+/// not a custom ACL.
 pub(crate) fn temp_file(script: &str, extension: &str) -> io::Result<PathBuf> {
     let directory = private_directory()?;
     let result = write_script_with(&directory, extension, |file| {
@@ -54,21 +57,18 @@ fn random_name() -> io::Result<String> {
 }
 
 fn private_directory() -> io::Result<PathBuf> {
-    let base = std::env::temp_dir();
-    #[cfg(windows)]
-    refuse_reparse_points(&base)?;
+    let base = private_base()?;
     loop {
         let path = base.join(format!("neotales-script-{}", random_name()?));
-        let mut builder = DirBuilder::new();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        match builder.create(&path) {
+        match create_directory(&path) {
             Ok(()) => {
+                #[cfg(unix)]
+                let verified = std::fs::File::open(&path)
+                    .and_then(|file| file.metadata())
+                    .and_then(|metadata| verify_unix_directory(&metadata, true));
                 #[cfg(windows)]
-                if let Err(error) = refuse_reparse_points(&path) {
+                let verified = refuse_reparse_points(&path);
+                if let Err(error) = verified {
                     let _ = std::fs::remove_dir(&path);
                     return Err(error);
                 }
@@ -78,6 +78,97 @@ fn private_directory() -> io::Result<PathBuf> {
             Err(error) => return Err(error),
         }
     }
+}
+
+fn create_directory(path: &Path) -> io::Result<()> {
+    let mut builder = DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
+fn environment_directory(key: &str) -> io::Result<PathBuf> {
+    let path = std::env::var_os(key)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .ok_or_else(|| io::Error::other("user directory is missing or not absolute"))?;
+    Ok(path)
+}
+
+#[cfg(unix)]
+fn verify_unix_directory(metadata: &std::fs::Metadata, private: bool) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    let mode = metadata.mode() & 0o7777;
+    if !metadata.is_dir()
+        || metadata.uid() != rustix::process::getuid().as_raw()
+        || if private {
+            mode != 0o700
+        } else {
+            mode & 0o022 != 0
+        }
+    {
+        return Err(io::Error::other(
+            "user directory is not private or owned by the current user",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn ensure_private_directory(path: &Path) -> io::Result<()> {
+    match create_directory(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
+    }
+    verify_unix_directory(&std::fs::symlink_metadata(path)?, true)
+}
+
+#[cfg(unix)]
+fn private_base() -> io::Result<PathBuf> {
+    let home = environment_directory("HOME")?;
+    private_base_in(&home)
+}
+
+#[cfg(unix)]
+fn private_base_in(home: &Path) -> io::Result<PathBuf> {
+    verify_unix_directory(&std::fs::symlink_metadata(home)?, false)?;
+    let cache = home.join(".cache");
+    match create_directory(&cache) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
+    }
+    let metadata = std::fs::symlink_metadata(&cache)?;
+    verify_unix_directory(&metadata, false)?;
+    let base = if verify_unix_directory(&metadata, true).is_ok() {
+        cache.join("neotales-script")
+    } else {
+        home.join(".neotales-script")
+    };
+    ensure_private_directory(&base)?;
+    Ok(base)
+}
+
+#[cfg(windows)]
+fn private_base() -> io::Result<PathBuf> {
+    let local = environment_directory("LOCALAPPDATA")?;
+    refuse_reparse_points(&local)?;
+    let base = local.join("neotales-script");
+    match create_directory(&base) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
+    }
+    refuse_reparse_points(&base)?;
+    if !std::fs::symlink_metadata(&base)?.is_dir() {
+        return Err(io::Error::other("user directory is not a directory"));
+    }
+    Ok(base)
 }
 
 #[cfg(windows)]
@@ -136,5 +227,23 @@ mod tests {
             0
         );
         std::fs::remove_dir(&directory).expect("remove directory");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn home_permissions_and_cache_fallback() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = private_directory().expect("create stand-in home");
+        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o720)).unwrap();
+        assert!(private_base_in(&home).is_err());
+        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let cache = home.join(".cache");
+        create_directory(&cache).unwrap();
+        std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(
+            private_base_in(&home).unwrap(),
+            home.join(".neotales-script")
+        );
+        std::fs::remove_dir_all(home).unwrap();
     }
 }
