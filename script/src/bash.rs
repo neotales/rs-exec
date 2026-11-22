@@ -84,14 +84,14 @@ fn resolve_script_file(path: &str) -> String {
     let absolute = if Path::new(path).is_absolute() {
         path.to_owned()
     } else {
-        std::env::current_dir()
-            .map(|directory| directory.join(path).to_string_lossy().into_owned())
-            .unwrap_or_else(|_| path.to_owned())
+        std::env::current_dir().map_or_else(
+            |_| path.to_owned(),
+            |directory| directory.join(path).to_string_lossy().into_owned(),
+        )
     };
 
-    let bash = neotales_exec::find(NAME, None)
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let bash =
+        neotales_exec::find(NAME, None).map_or_default(|path| path.to_string_lossy().into_owned());
     if !bash.to_lowercase().contains("system32") {
         return absolute;
     }

@@ -116,9 +116,11 @@ fn a_sigpipe_killed_writer_does_not_fail_the_reader() {
     assert_eq!(output.stages[1].code, 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn which_cache_respects_prepend_paths() {
     use std::fs;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     let root = std::env::temp_dir().join(format!(
