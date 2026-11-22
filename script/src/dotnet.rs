@@ -88,7 +88,7 @@ fn with_separator(prefix: &[&str], args: &[&str]) -> Command {
     build(all)
 }
 
-/// Writes `script` to a content-addressed `.cs` file in the user's private cache directory and
+/// Writes `script` to a fresh private `.cs` file in a temporary directory and
 /// builds the `.cs` file form.
 ///
 /// The file is left in place, and the path is recorded on the command for [`Command::temp_file`].

@@ -91,6 +91,41 @@ fn golang_inline_writes_a_temporary_file() {
 }
 
 #[test]
+fn inline_scripts_use_distinct_private_files() {
+    let go = golang::inline("same source", []).expect("inline Go");
+    let other = golang::script("same source", []).expect("Go script");
+    let cs = dotnet::script("same source", []).expect(".NET script");
+    let paths = [
+        go.temp_file().unwrap(),
+        other.temp_file().unwrap(),
+        cs.temp_file().unwrap(),
+    ];
+    assert_ne!(paths[0], paths[1]);
+    assert_ne!(paths[1].parent(), paths[0].parent());
+    for path in paths {
+        assert_eq!(std::fs::read(path).unwrap(), b"same source");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            assert_eq!(
+                std::fs::metadata(path.parent().unwrap())
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+        }
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(path.parent().unwrap()).unwrap();
+    }
+}
+
+#[test]
 fn dotnet_file_separates_program_arguments() {
     let command = dotnet::file("app.cs", ["a"]);
 

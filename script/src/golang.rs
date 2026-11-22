@@ -59,7 +59,7 @@ pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command 
     build(all)
 }
 
-/// Writes `script` to a content-addressed file in the user's private cache directory and builds
+/// Writes `script` to a fresh private file in a temporary directory and builds
 /// `go run <file> <args>`.
 ///
 /// The file is left in place, matching the reference implementation, and the path is recorded on
