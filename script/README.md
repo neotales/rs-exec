@@ -17,7 +17,9 @@ cargo add neotales-script
 ## What you can do 🧰
 
 **Get the arguments the runtime expects.** Each module knows how its runtime wants a file or a
-piece of source, so the caller never spells out `-c`, `--file`, or `run`.
+piece of source, so the caller never spells out `-c`, `--file`, or `run`. `bash::inline` and
+`sh::inline` pass a `$0` placeholder before your arguments, so the first one reaches the script as
+`$1`.
 
 ```rust
 use neotales_script::{bash, node};
@@ -38,7 +40,7 @@ use neotales_script::{bash, cmd, golang};
 assert_eq!(bash::script("build.sh", []).arguments()[4], "build.sh");
 assert_eq!(bash::script("echo hi", []).arguments()[5], "echo hi");
 assert_eq!(cmd::script("setup.bat", []).arguments()[2], "setup.bat");
-assert_eq!(golang::script("main.go", []).arguments()[1], "main.go");
+assert_eq!(golang::script("main.go", []).unwrap().arguments()[1], "main.go");
 ```
 
 **Run the command like any other.** Every constructor returns an owned `neotales_exec::Command`,
@@ -62,10 +64,10 @@ the file stays there.
 ```rust
 use neotales_script::{dotnet, golang};
 
-let go = golang::inline("package main\nfunc main() {}\n", []);
+let go = golang::inline("package main\nfunc main() {}\n", []).unwrap();
 assert!(go.temp_file().is_some());
 
-let cs = dotnet::inline("System.Console.WriteLine(1);", []);
+let cs = dotnet::inline("System.Console.WriteLine(1);", []).unwrap();
 assert!(cs.temp_file().is_some());
 ```
 

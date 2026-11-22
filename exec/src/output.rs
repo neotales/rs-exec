@@ -13,6 +13,9 @@ pub struct Stage {
     /// The arguments, in order.
     pub args: Vec<OsString>,
     /// The exit code of this stage.
+    ///
+    /// A stage killed by a signal reports `128` plus the signal number, the way a shell does. Only
+    /// the last stage decides whether [`Output::is_ok`] is true.
     pub code: i32,
     /// The bytes this stage wrote to stdout that were captured.
     ///

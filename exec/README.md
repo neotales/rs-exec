@@ -38,7 +38,9 @@ assert_eq!(out.lines(), ["hello world"]);
 ```
 
 **Pipe stages.** Every stage starts before the first wait, so a full pipe buffer cannot deadlock.
-The result describes the last stage. The earlier ones stay in `stages`, each with its own stderr.
+The result describes the last stage. A signal on an earlier stage is recorded on that stage as
+`128` plus the signal number and does not fail the pipeline. The earlier stages stay in `stages`,
+each with its own stderr.
 
 ```rust,no_run
 use neotales_exec::Command;

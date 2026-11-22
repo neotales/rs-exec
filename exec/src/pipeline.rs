@@ -1,7 +1,7 @@
 //! Pipelines: several processes with each stage's stdout wired to the next stage's stdin.
 
 use std::io::Read;
-use std::process::{Child, ChildStdout, Stdio};
+use std::process::{Child, ChildStdout, ExitStatus, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::SystemTime;
 
@@ -47,11 +47,15 @@ impl Pipeline {
     /// [`Output::stages`], with their captured stderr and the exit code of each. A non-zero exit is
     /// not an error until the caller asks for one with [`Output::to_error`].
     ///
+    /// An earlier stage that ends on a signal is recorded on that stage, as `128` plus the signal
+    /// number. Only the last stage decides whether the pipeline failed, so `yes | head -n 1`
+    /// returns the reader's result even though the writer was killed by `SIGPIPE`.
+    ///
     /// # Errors
     ///
     /// Returns [`Error::Spawn`] when a stage cannot start; stages already started are killed and
-    /// waited for first. Returns [`Error::Wait`] or [`Error::Terminated`] when a status cannot be
-    /// collected.
+    /// waited for first. Returns [`Error::Wait`] when a status cannot be collected, and
+    /// [`Error::Terminated`] only when the last stage was killed by a signal.
     pub fn output(self) -> Result<Output, Error> {
         execute(&self.stages, Mode::Capture)
     }
@@ -65,8 +69,8 @@ impl Pipeline {
     /// # Errors
     ///
     /// Returns [`Error::Spawn`] when a stage cannot start; stages already started are killed and
-    /// waited for first. Returns [`Error::Wait`] or [`Error::Terminated`] when a status cannot be
-    /// collected.
+    /// waited for first. Returns [`Error::Wait`] when a status cannot be collected, and
+    /// [`Error::Terminated`] only when the last stage was killed by a signal.
     pub fn run(self) -> Result<Output, Error> {
         execute(&self.stages, Mode::Inherit)
     }
@@ -173,21 +177,19 @@ fn execute(stages: &[Command], mode: Mode) -> Result<Output, Error> {
 }
 
 fn wait(children: &mut [Child], stages: &[Command]) -> (Vec<i32>, Option<Error>) {
+    let last_index = stages.len().saturating_sub(1);
     let mut codes = Vec::with_capacity(children.len());
     let mut error = None;
 
-    for (child, stage) in children.iter_mut().zip(stages) {
+    for (index, (child, stage)) in children.iter_mut().zip(stages).enumerate() {
         match child.wait() {
             Ok(status) => {
-                if let Some(code) = status.code() {
-                    codes.push(code);
-                } else {
-                    codes.push(0);
-                    if error.is_none() {
-                        error = Some(Error::Terminated {
-                            program: stage.program().to_os_string(),
-                        });
-                    }
+                let terminated = status.code().is_none();
+                codes.push(exit_code(status));
+                if index == last_index && terminated && error.is_none() {
+                    error = Some(Error::Terminated {
+                        program: stage.program().to_os_string(),
+                    });
                 }
             }
             Err(source) => {
@@ -203,6 +205,23 @@ fn wait(children: &mut [Child], stages: &[Command]) -> (Vec<i32>, Option<Error>)
     }
 
     (codes, error)
+}
+
+/// `128` plus the signal number for a signalled process, matching a shell.
+fn exit_code(status: ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return 128 + signal;
+        }
+    }
+
+    0
 }
 
 fn stop(

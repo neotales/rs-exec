@@ -10,7 +10,9 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 pub struct WhichOptions {
     /// Remember a resolved path for the next lookup of the same command.
     ///
-    /// A miss is not remembered, so installing a tool makes it visible without a restart.
+    /// A miss is not remembered, so installing a tool makes it visible without a restart. The
+    /// cache is not used when [`WhichOptions::prepend_paths`] is set, because the result depends
+    /// on those directories.
     pub use_cache: bool,
     /// Directories searched before `PATH`, in order.
     pub prepend_paths: Vec<PathBuf>,
@@ -36,17 +38,17 @@ pub fn which_first(command: &str, options: &WhichOptions) -> Option<PathBuf> {
         return None;
     }
 
-    if options.use_cache
-        && let Some(found) = cache_get(command)
-    {
+    // `prepend_paths` changes the answer for the same command, so a lookup that uses them is
+    // never served from, nor stored in, the name-only cache.
+    let cacheable = options.use_cache && options.prepend_paths.is_empty();
+
+    if cacheable && let Some(found) = cache_get(command) {
         return Some(found);
     }
 
     let found = resolve(command, options);
 
-    if options.use_cache
-        && let Some(path) = &found
-    {
+    if cacheable && let Some(path) = &found {
         cache_put(command, path.clone());
     }
 

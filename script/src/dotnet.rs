@@ -88,22 +88,32 @@ fn with_separator(prefix: &[&str], args: &[&str]) -> Command {
     build(all)
 }
 
-/// Writes `script` to a content-addressed `.cs` file in the temporary directory and builds the
-/// `.cs` file form.
+/// Writes `script` to a content-addressed `.cs` file in the user's private cache directory and
+/// builds the `.cs` file form.
 ///
-/// The file is left in the temporary directory, and the path is recorded on the command for
-/// [`Command::temp_file`].
-pub fn inline<'a>(script: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let path = common::temp_file(script, "cs");
-    let path = path.to_string_lossy().into_owned();
-    file(&path, args).with_temp_file(path.into())
+/// The file is left in place, and the path is recorded on the command for [`Command::temp_file`].
+///
+/// # Errors
+///
+/// Returns the I/O error when the private directory or the file cannot be created or written.
+pub fn inline<'a>(
+    script: &str,
+    args: impl IntoIterator<Item = &'a str>,
+) -> std::io::Result<Command> {
+    let path = common::temp_file(script, "cs")?;
+    let argument = path.to_string_lossy().into_owned();
+    Ok(file(&argument, args).with_temp_file(path))
 }
 
 /// Runs `text` as a file when it is one line ending in a known .NET extension, and inline
 /// otherwise.
-pub fn script<'a>(text: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
+///
+/// # Errors
+///
+/// Returns the I/O error from [`inline`] when the source has to be written.
+pub fn script<'a>(text: &str, args: impl IntoIterator<Item = &'a str>) -> std::io::Result<Command> {
     match common::script_file(text, &EXTENSIONS) {
-        Some(path) => file(path, args),
+        Some(path) => Ok(file(path, args)),
         None => inline(text, args),
     }
 }

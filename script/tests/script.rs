@@ -18,7 +18,15 @@ fn bash_inline_puts_script_after_dash_c() {
     assert!(command.program().to_string_lossy().contains("bash"));
     assert_eq!(
         args(&command),
-        ["--noprofile", "--norc", "-eo", "pipefail", "-c", "echo hi"]
+        [
+            "--noprofile",
+            "--norc",
+            "-eo",
+            "pipefail",
+            "-c",
+            "echo hi",
+            "bash"
+        ]
     );
 }
 
@@ -34,7 +42,7 @@ fn bash_script_treats_one_sh_line_as_a_file() {
 fn sh_inline_passes_dash_c() {
     let command = sh::inline("echo hi", []);
 
-    assert_eq!(args(&command), ["-e", "-c", "echo hi"]);
+    assert_eq!(args(&command), ["-e", "-c", "echo hi", "sh"]);
 }
 
 #[test]
@@ -72,7 +80,7 @@ fn golang_file_runs_the_file() {
 
 #[test]
 fn golang_inline_writes_a_temporary_file() {
-    let command = golang::inline("package main", []);
+    let command = golang::inline("package main", []).expect("inline Go");
 
     let temp = command.temp_file().expect("temp file");
     assert!(temp.to_string_lossy().ends_with(".go"));
@@ -121,6 +129,28 @@ fn powershell_and_pwsh_share_the_shape() {
             "Write-Output hi"
         ]
     );
+}
+
+#[test]
+fn bash_inline_passes_the_first_argument_as_dollar_one() {
+    if which("bash").is_none() && !std::path::Path::new("/bin/bash").exists() {
+        return;
+    }
+
+    let output = bash::inline("echo \"$1\"", ["hello"])
+        .output()
+        .expect("bash");
+    assert_eq!(output.text().trim(), "hello");
+}
+
+#[test]
+fn sh_inline_passes_the_first_argument_as_dollar_one() {
+    if which("sh").is_none() && !std::path::Path::new("/bin/sh").exists() {
+        return;
+    }
+
+    let output = sh::inline("echo \"$1\"", ["hello"]).output().expect("sh");
+    assert_eq!(output.text().trim(), "hello");
 }
 
 #[test]

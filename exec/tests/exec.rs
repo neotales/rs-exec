@@ -5,7 +5,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use neotales_exec::{Command, CommandView, Output, clear_logger, set_logger, which};
+use neotales_exec::{
+    Command, CommandView, Output, WhichOptions, clear_logger, set_logger, which, which_first,
+};
 
 fn text(output: &Output) -> String {
     output.text().trim().to_owned()
@@ -73,6 +75,89 @@ fn three_stage_pipeline_does_not_deadlock() {
 
     assert_eq!(output.stages.len(), 3);
     assert_eq!(output.text(), "HELLO\n");
+}
+
+#[test]
+fn a_signalled_earlier_stage_does_not_fail_the_last_stage() {
+    if which("sh").is_none() {
+        return;
+    }
+
+    // The first stage kills itself with SIGPIPE, which is what a writer sees when the reader has
+    // gone; the reader still exits 0 and its result must be the pipeline's result.
+    let output = Command::new("sh")
+        .args(["-c", "kill -s PIPE $$"])
+        .pipe(Command::new("sh").args(["-c", "printf done"]))
+        .output()
+        .expect("pipeline");
+
+    assert_eq!(output.code, 0);
+    assert!(output.is_ok());
+    assert_eq!(output.text(), "done");
+    assert_eq!(output.stages[0].code, 141);
+    assert_eq!(output.stages[1].code, 0);
+}
+
+#[test]
+fn a_sigpipe_killed_writer_does_not_fail_the_reader() {
+    if which("yes").is_none() || which("head").is_none() {
+        return;
+    }
+
+    let output = Command::new("yes")
+        .pipe(Command::new("head").args(["-n", "1"]))
+        .output()
+        .expect("pipeline");
+
+    assert_eq!(output.code, 0);
+    assert!(output.is_ok());
+    assert_eq!(output.text(), "y\n");
+    assert_ne!(output.stages[0].code, 0);
+    assert_eq!(output.stages[1].code, 0);
+}
+
+#[test]
+fn which_cache_respects_prepend_paths() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::env::temp_dir().join(format!(
+        "neotales-which-test-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_nanos())
+    ));
+    let first = root.join("first");
+    let second = root.join("second");
+    fs::create_dir_all(&first).expect("create first directory");
+    fs::create_dir_all(&second).expect("create second directory");
+    for directory in [&first, &second] {
+        let path = directory.join("probe-tool");
+        fs::write(&path, "#!/bin/sh\nexit 0\n").expect("write probe");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
+            .expect("make probe executable");
+    }
+
+    let from_first = which_first(
+        "probe-tool",
+        &WhichOptions {
+            use_cache: true,
+            prepend_paths: vec![first.clone()],
+        },
+    );
+    let from_second = which_first(
+        "probe-tool",
+        &WhichOptions {
+            use_cache: true,
+            prepend_paths: vec![second.clone()],
+        },
+    );
+
+    fs::remove_dir_all(&root).expect("remove test directories");
+
+    assert_eq!(from_first, Some(first.join("probe-tool")));
+    assert_eq!(from_second, Some(second.join("probe-tool")));
 }
 
 #[test]

@@ -55,11 +55,15 @@ pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command 
     build(all)
 }
 
-/// Builds `bash --noprofile --norc -eo pipefail -c <script> <args>`.
+/// Builds `bash --noprofile --norc -eo pipefail -c <script> bash <args>`.
+///
+/// The caller's arguments follow a `$0` placeholder, so the first one reaches the script as `$1`.
 pub fn inline<'a>(script: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
     let mut all: Vec<OsString> = SCRIPT_ARGS.iter().copied().map(OsString::from).collect();
     all.push("-c".into());
     all.push(script.into());
+    // `-c` makes the next word `$0`, so a placeholder keeps the first caller argument at `$1`.
+    all.push(NAME.into());
     all.extend(args.into_iter().map(OsString::from));
     build(all)
 }
