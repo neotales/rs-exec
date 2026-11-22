@@ -1,0 +1,240 @@
+name: release
+
+# Publishing is driven by a tag, never by a branch. The tag must equal `v` plus
+# the version in Cargo.toml, so the thing that ran is a thing that can be named.
+#
+# Trusted publishing: the publish job asks crates.io for a short-lived token
+# over OIDC. There is no CARGO_REGISTRY_TOKEN secret in this repository.
+# crates.io cannot bootstrap a crate this way. The first publish of a new crate
+# is manual, through ~/work/rs/publish.sh. See RELEASE.md.
+#
+# The two crates are not independent. `neotales-script` names `neotales-exec` as
+# a version dependency, so exec must reach crates.io first and every later
+# upload of script needs that exact exec version to be visible.
+#
+# The publish job sets no GitHub environment on purpose. The trusted publisher
+# saved on crates.io for this organisation has an empty environment, and
+# crates.io compares that field with the job's, so an environment on either side
+# alone fails the token exchange.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # Runs on both triggers. On workflow_dispatch this job is the whole release:
+  # checks and a `cargo publish --dry-run` of neotales-exec, never a real
+  # publish.
+  check:
+    name: pre-publish checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: release
+
+      # `cargo fmt` takes `--all`, which is the workspace spelling; it has no
+      # `--workspace` flag.
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --all-targets --all-features
+
+      # `--all-targets` does not run doctests, and the README samples are the
+      # supported front door for both crates.
+      - name: Doctests
+        run: cargo test --workspace --doc --all-features
+
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --workspace --all-features --no-deps
+
+      # A manual dry run packages neotales-exec only. Packaging
+      # neotales-script rewrites the path dependency to
+      # `neotales-exec = "<version>"`, so the dry run can only pass once that
+      # version exists on crates.io; it starts after the first manual exec
+      # upload. A tag run adds it when the exec version is already published,
+      # which is the re-run case; otherwise exec is uploaded later in this same
+      # run.
+      - name: Package without publishing
+        run: |
+          set -euo pipefail
+
+          cargo publish -p neotales-exec --dry-run --locked
+
+          if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
+            echo "manual run: neotales-script is packaged once neotales-exec is on crates.io"
+            exit 0
+          fi
+
+          version=$(python3 - <<'PY'
+          import tomllib
+
+          with open("exec/Cargo.toml", "rb") as handle:
+              print(tomllib.load(handle)["package"]["version"])
+          PY
+          )
+
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H 'User-Agent: neotales-release (https://github.com/neotales)' \
+            "https://crates.io/api/v1/crates/neotales-exec/${version}" || echo 000)
+
+          if [ "$code" = "200" ]; then
+            cargo publish -p neotales-script --dry-run --locked
+          else
+            echo "neotales-exec ${version} is not on crates.io yet; skipping the script dry run"
+          fi
+
+  version:
+    name: tag matches the crate version
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compare the tag with both manifests
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import sys
+          import tomllib
+
+          manifests = {
+              "neotales-exec": "exec/Cargo.toml",
+              "neotales-script": "script/Cargo.toml",
+          }
+
+          versions = {}
+          for name, path in manifests.items():
+              with open(path, "rb") as handle:
+                  package = tomllib.load(handle).get("package")
+              if not isinstance(package, dict):
+                  sys.exit(f"{path} has no [package] table")
+              version = package.get("version")
+              if not isinstance(version, str):
+                  sys.exit(
+                      f"{path} [package] version is not a literal string. "
+                      "Each crate must carry the published version."
+                  )
+              versions[name] = version
+
+          tag = os.environ["TAG"]
+          print(f"tag: {tag}")
+          for name, version in versions.items():
+              print(f"{name}: {version}")
+
+          distinct = set(versions.values())
+          if len(distinct) != 1:
+              print(f"::error::the crates carry different versions: {versions}")
+              sys.exit(1)
+
+          expected = f"v{distinct.pop()}"
+          if tag != expected:
+              print(f"::error::tag {tag} does not match {expected}")
+              sys.exit(1)
+          PY
+
+  publish:
+    name: publish to crates.io
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check, version]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No GitHub environment, deliberately. The trusted publisher stored on
+    # crates.io for this organisation has an empty environment, and crates.io
+    # compares that field with the job's. Setting `environment: release` here
+    # makes the OIDC token exchange fail with no other symptom. If someone ever
+    # does set an environment name on crates.io, this job must set that exact
+    # name. See RELEASE.md.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: release-publish
+
+      # Fails when the crate does not exist on crates.io yet, or when the
+      # trusted publisher does not match this repository, this workflow file and
+      # an empty environment. That is the intended failure: there is nothing to
+      # fall back to, and no token to widen. See RELEASE.md for the first
+      # publish.
+      - name: Exchange the OIDC token for a crates.io token
+        id: auth
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+
+      # One exchange covers every crate in this repository whose trusted
+      # publisher matches release.yml and an empty environment. crates.io puts
+      # each matching crate id on that token. A missing config rejects that
+      # crate only; do not treat that as index lag.
+      #
+      # The order matters: `neotales-script` depends on `neotales-exec` by
+      # version, so exec goes first and the index has to carry it before script
+      # is accepted. A re-run skips a version already on crates.io. Do not
+      # republish, and do not delete or move the tag.
+      - name: Publish neotales-exec, then neotales-script
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          version_of() {
+            python3 - "$1" <<'PY'
+          import sys
+          import tomllib
+          with open(sys.argv[1], "rb") as handle:
+              version = tomllib.load(handle)["package"]["version"]
+          if not isinstance(version, str):
+              raise SystemExit(f"{sys.argv[1]} version is not a string")
+          print(version)
+          PY
+          }
+
+          registry_has() {
+            local crate="$1" version="$2" code
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H 'User-Agent: neotales-release (https://github.com/neotales)' \
+              "https://crates.io/api/v1/crates/${crate}/${version}" || echo 000)
+            [ "$code" = "200" ]
+          }
+
+          publish_crate() {
+            local package="$1" manifest="$2" version
+            version=$(version_of "$manifest")
+            if registry_has "$package" "$version"; then
+              echo "$package $version is already on crates.io; not publishing again"
+              return 0
+            fi
+            cargo publish -p "$package" --locked
+          }
+
+          # exec first: script's packaged manifest names it by version, and cargo
+          # will reject the upload while that version is absent from the index.
+          publish_crate neotales-exec exec/Cargo.toml
+          publish_crate neotales-script script/Cargo.toml
