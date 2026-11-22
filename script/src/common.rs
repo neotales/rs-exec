@@ -136,22 +136,46 @@ fn private_base() -> io::Result<PathBuf> {
 
 #[cfg(unix)]
 fn private_base_in(home: &Path) -> io::Result<PathBuf> {
-    verify_unix_directory(&std::fs::symlink_metadata(home)?, false)?;
-    let cache = home.join(".cache");
-    match create_directory(&cache) {
-        Ok(()) => {}
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-        Err(error) => return Err(error),
+    use std::path::Component;
+
+    if !home.is_absolute() || home.components().any(|part| part == Component::ParentDir) {
+        return Err(io::Error::other(
+            "home directory must be an absolute path without parent components",
+        ));
     }
-    let metadata = std::fs::symlink_metadata(&cache)?;
-    verify_unix_directory(&metadata, false)?;
-    let base = if verify_unix_directory(&metadata, true).is_ok() {
-        cache.join("neotales-script")
-    } else {
-        home.join(".neotales-script")
-    };
+    // Rebuild from components so a trailing slash cannot cause symlink_metadata to follow a link.
+    let home: PathBuf = home.components().collect();
+    verify_unix_directory(&std::fs::symlink_metadata(&home)?, false)?;
+    for ancestor in home.ancestors().skip(1) {
+        verify_ancestor(&std::fs::symlink_metadata(ancestor)?)?;
+    }
+    let base = home.join(".neotales-script");
     ensure_private_directory(&base)?;
     Ok(base)
+}
+
+#[cfg(unix)]
+fn trusted_ancestor(owner: u32, mode: u32, current: u32) -> bool {
+    if owner == 0 {
+        mode & 0o022 == 0 || mode & 0o1000 != 0
+    } else {
+        owner == current && mode & 0o022 == 0
+    }
+}
+
+#[cfg(unix)]
+fn verify_ancestor(metadata: &std::fs::Metadata) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    if !metadata.is_dir()
+        || !trusted_ancestor(
+            metadata.uid(),
+            metadata.mode(),
+            rustix::process::getuid().as_raw(),
+        )
+    {
+        return Err(io::Error::other("home directory has an untrusted ancestor"));
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -231,19 +255,56 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn home_permissions_and_cache_fallback() {
+    fn home_permissions_and_unrelated_cache() {
         use std::os::unix::fs::PermissionsExt;
         let home = private_directory().expect("create stand-in home");
         std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o720)).unwrap();
         assert!(private_base_in(&home).is_err());
         std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
         let cache = home.join(".cache");
+        std::os::unix::fs::symlink("missing", &cache).unwrap();
+        assert_eq!(
+            private_base_in(&home).unwrap(),
+            home.join(".neotales-script")
+        );
+        std::fs::remove_file(&cache).unwrap();
         create_directory(&cache).unwrap();
-        std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o770)).unwrap();
         assert_eq!(
             private_base_in(&home).unwrap(),
             home.join(".neotales-script")
         );
         std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ancestors_require_trusted_owners_and_permissions() {
+        assert!(trusted_ancestor(0, 0o755, 1000));
+        assert!(trusted_ancestor(0, 0o1777, 1000));
+        assert!(!trusted_ancestor(0, 0o777, 1000));
+        assert!(trusted_ancestor(1000, 0o755, 1000));
+        assert!(!trusted_ancestor(1000, 0o1777, 1000));
+        assert!(!trusted_ancestor(1001, 0o700, 1000));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn home_rejects_writable_and_symlinked_ancestors() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = private_directory().unwrap();
+        let parent = root.join("parent");
+        let home = parent.join("home");
+        create_directory(&parent).unwrap();
+        create_directory(&home).unwrap();
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o770)).unwrap();
+        assert!(private_base_in(&home).is_err());
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let link = root.join("link");
+        std::os::unix::fs::symlink(&parent, &link).unwrap();
+        assert!(private_base_in(&link.join("home")).is_err());
+        assert!(private_base_in(Path::new(&format!("{}/", link.display()))).is_err());
+        assert!(private_base_in(&link.join("home/..")).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
