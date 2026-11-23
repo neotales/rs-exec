@@ -8,6 +8,7 @@ use neotales_exec::{Command, Executable, register};
 use crate::common;
 
 const NAME: &str = "deno";
+const FILE_ARGS: [&str; 2] = ["run", "-A"];
 const EXTENSIONS: [&str; 4] = [".js", ".mjs", ".cjs", ".ts"];
 const VARIABLE: &str = "RUN_DENO_EXE";
 
@@ -49,14 +50,41 @@ pub fn new<'a>(args: impl IntoIterator<Item = &'a str>) -> Command {
 ///
 /// `-A` is cast's allow-all flag, kept as the default the reference implementation uses.
 pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = vec!["run".into(), "-A".into(), path.into()];
+    file_with_shell_args(path, FILE_ARGS, args)
+}
+
+/// Builds `deno <shell_args> <path> <args>`.
+///
+/// `shell_args` replaces the default `run -A` prefix, and an empty list means no prefix; [`file()`]
+/// is the default shape.
+pub fn file_with_shell_args<'a, S, A>(path: &str, shell_args: S, args: A) -> Command
+where
+    S: IntoIterator<Item = &'a str>,
+    A: IntoIterator<Item = &'a str>,
+{
+    let mut all: Vec<OsString> = shell_args.into_iter().map(OsString::from).collect();
+    all.push(path.into());
     all.extend(args.into_iter().map(OsString::from));
     build(all)
 }
 
 /// Builds `deno eval <script> <args>`.
 pub fn inline<'a>(script: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = vec!["eval".into(), script.into()];
+    inline_with_shell_args(script, [], args)
+}
+
+/// Builds `deno <shell_args> eval <script> <args>`.
+///
+/// [`inline()`] has no prefix today, so `shell_args` is inserted before `eval`; an empty list means
+/// no prefix, and a caller who wants the default uses [`inline()`].
+pub fn inline_with_shell_args<'a, S, A>(script: &str, shell_args: S, args: A) -> Command
+where
+    S: IntoIterator<Item = &'a str>,
+    A: IntoIterator<Item = &'a str>,
+{
+    let mut all: Vec<OsString> = shell_args.into_iter().map(OsString::from).collect();
+    all.push("eval".into());
+    all.push(script.into());
     all.extend(args.into_iter().map(OsString::from));
     build(all)
 }

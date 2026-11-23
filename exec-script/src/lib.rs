@@ -7,6 +7,13 @@
 //! its inline flag writes the source to a private file first, so its `inline` and `script` return
 //! `io::Result<Command>`; every other constructor returns a `Command`.
 //!
+//! [`bash`], [`sh`], [`zsh`], [`powershell`], [`pwsh`], [`cmd`], and [`deno`] also have
+//! `file_with_shell_args` and `inline_with_shell_args`, which replace the default flag prefix and
+//! keep the rest of the argument shape.
+//!
+//! [`golang`], [`dotnet`], [`uv`], [`php`], [`fish`], [`nushell`], [`dart`], [`r`], and [`tcl`]
+//! write inline source to a private file, and every other module passes it directly.
+//!
 //! The runtime is resolved through [`neotales_exec::find`] on first use. When it is not installed,
 //! the command carries the bare name (`bash`, `node`, `go`) and the spawn reports the missing
 //! program.

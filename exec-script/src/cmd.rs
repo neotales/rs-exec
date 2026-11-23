@@ -44,7 +44,20 @@ pub fn new<'a>(args: impl IntoIterator<Item = &'a str>) -> Command {
 
 /// Builds `cmd /d /c <path> <args>`.
 pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = SCRIPT_ARGS.iter().copied().map(OsString::from).collect();
+    file_with_shell_args(path, SCRIPT_ARGS, args)
+}
+
+/// Builds `cmd <shell_args> <path> <args>`.
+///
+/// `shell_args` replaces the default `/d /c` prefix, and an empty list means no prefix; [`file()`] is
+/// the default shape. Replacing the prefix also drops `/c`, so pass `/c` back unless the caller
+/// wants something else.
+pub fn file_with_shell_args<'a, S, A>(path: &str, shell_args: S, args: A) -> Command
+where
+    S: IntoIterator<Item = &'a str>,
+    A: IntoIterator<Item = &'a str>,
+{
+    let mut all: Vec<OsString> = shell_args.into_iter().map(OsString::from).collect();
     all.push(path.into());
     all.extend(args.into_iter().map(OsString::from));
     build(all)
@@ -52,7 +65,20 @@ pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command 
 
 /// Builds `cmd /d /c <script> <args>`.
 pub fn inline<'a>(script: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = SCRIPT_ARGS.iter().copied().map(OsString::from).collect();
+    inline_with_shell_args(script, SCRIPT_ARGS, args)
+}
+
+/// Builds `cmd <shell_args> <script> <args>`.
+///
+/// `shell_args` replaces the default `/d /c` prefix, and an empty list means no prefix; [`inline()`]
+/// is the default shape. Replacing the prefix also drops `/c`, so pass `/c` back unless the caller
+/// wants something else.
+pub fn inline_with_shell_args<'a, S, A>(script: &str, shell_args: S, args: A) -> Command
+where
+    S: IntoIterator<Item = &'a str>,
+    A: IntoIterator<Item = &'a str>,
+{
+    let mut all: Vec<OsString> = shell_args.into_iter().map(OsString::from).collect();
     all.push(script.into());
     all.extend(args.into_iter().map(OsString::from));
     build(all)

@@ -418,3 +418,28 @@ fn racket_separates_arguments_with_a_double_dash() {
         ["-e", "(+ 1 1)", "--", "--help"]
     );
 }
+
+#[test]
+fn bash_inline_with_shell_args_drops_the_default_prefix() {
+    let command = bash::inline_with_shell_args("echo hi", ["-e"], ["x"]);
+    let arguments = args(&command);
+
+    assert_eq!(arguments, ["-e", "-c", "echo hi", "bash", "x"]);
+    assert!(!arguments.iter().any(|argument| argument == "--noprofile"));
+}
+
+#[test]
+fn bash_file_with_shell_args_appends_the_path_and_arguments() {
+    let command = bash::file_with_shell_args("a.sh", [], ["x"]);
+
+    assert_eq!(args(&command), ["a.sh", "x"]);
+}
+
+#[test]
+fn deno_file_with_shell_args_replaces_run_and_allow() {
+    let command = deno::file_with_shell_args("app.ts", ["run"], ["--x"]);
+    let arguments = args(&command);
+
+    assert_eq!(arguments, ["run", "app.ts", "--x"]);
+    assert!(!arguments.iter().any(|argument| argument == "-A"));
+}

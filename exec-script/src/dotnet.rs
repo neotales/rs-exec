@@ -113,7 +113,7 @@ pub fn inline<'a>(
 ///
 /// # Errors
 ///
-/// Returns the I/O error from [`inline`] when the source has to be written.
+/// Returns the I/O error from [`inline()`] when the source has to be written.
 pub fn script<'a>(text: &str, args: impl IntoIterator<Item = &'a str>) -> std::io::Result<Command> {
     match common::script_file(text, &EXTENSIONS) {
         Some(path) => Ok(file(path, args)),

@@ -43,18 +43,43 @@ assert_eq!(cmd::script("setup.bat", []).arguments()[2], "setup.bat");
 assert_eq!(golang::script("main.go", []).unwrap().arguments()[1], "main.go");
 ```
 
-**Run the command like any other.** Every constructor returns an owned `neotales_exec::Command`,
-so the working directory, the environment, and the logger are set on the same chain.
+**Run it in the terminal, or capture it.** `run` inherits stdin, stdout, and stderr; `output` is the
+constructor that captures.
 
 ```rust,no_run
 use neotales_exec_script::bash;
 
-let output = bash::inline("echo hi", [])
+bash::inline("echo hi", [])
     .current_dir(".")
     .env("MODE", "test")
+    .run()
+    .unwrap();
+```
+
+**Replace the default shell flags.** `inline_with_shell_args` and `file_with_shell_args` swap the
+prefix that `bash`, `sh`, `zsh`, `powershell`, `pwsh`, `cmd`, and `deno` add by default. The rest of
+the argument shape stays.
+
+```rust
+use neotales_exec_script::bash;
+
+let command = bash::inline_with_shell_args("echo hi", ["-e"], []);
+assert!(!command.arguments().iter().any(|argument| argument == "--noprofile"));
+assert!(command.arguments().iter().any(|argument| argument == "-e"));
+```
+
+**Chain into another command.** A command from this crate is a `neotales_exec::Command`, so it pipes
+without leaving the type.
+
+```rust,no_run
+use neotales_exec::Command;
+use neotales_exec_script::bash;
+
+let output = bash::inline("echo Hello World", [])
+    .pipe(Command::new("grep").arg("Hello"))
     .output()
     .unwrap();
-assert_eq!(output.text().trim(), "hi");
+assert_eq!(output.text(), "Hello World\n");
 ```
 
 **Pass source on the runtime's own flag.** Python, Ruby, Deno, Lua, Julia, Elixir, Groovy, Racket,
@@ -71,9 +96,10 @@ let command = perl::inline("print 1", ["-n"]);
 assert_eq!(command.arguments(), ["-e", "print 1", "--", "-n"]);
 ```
 
-**Run inline Go, .NET, Dart, R, and Tcl source.** `golang::inline`, `dotnet::inline`,
-`dart::inline`, `r::inline`, and `tcl::inline` write the source to a fresh private file in the
-user's directory, then run it. The command records the path, and the file stays there.
+**Run inline source through a private file.** `golang`, `dotnet`, `uv`, `php`, `fish`, `nushell`,
+`dart`, `r`, and `tcl` cannot take the source on a flag without losing the caller's arguments, so
+they write a fresh private file in the user's directory and run that. The command records the path,
+the file stays there, and every other module writes nothing.
 
 On Windows, privacy relies on the per-user `LocalAppData` directory and reparse-point refusal, not a custom ACL.
 

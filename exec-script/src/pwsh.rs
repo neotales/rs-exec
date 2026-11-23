@@ -48,7 +48,19 @@ pub fn new<'a>(args: impl IntoIterator<Item = &'a str>) -> Command {
 
 /// Builds `pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File <path> <args>`.
 pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = SCRIPT_ARGS.iter().copied().map(OsString::from).collect();
+    file_with_shell_args(path, SCRIPT_ARGS, args)
+}
+
+/// Builds `pwsh <shell_args> -File <path> <args>`.
+///
+/// `shell_args` replaces the default `-NoLogo -NoProfile -ExecutionPolicy Bypass` prefix, and an empty list
+/// means no prefix; [`file()`] is the default shape.
+pub fn file_with_shell_args<'a, S, A>(path: &str, shell_args: S, args: A) -> Command
+where
+    S: IntoIterator<Item = &'a str>,
+    A: IntoIterator<Item = &'a str>,
+{
+    let mut all: Vec<OsString> = shell_args.into_iter().map(OsString::from).collect();
     all.push("-File".into());
     all.push(path.into());
     all.extend(args.into_iter().map(OsString::from));
@@ -57,7 +69,19 @@ pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command 
 
 /// Builds `pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command <script> <args>`.
 pub fn inline<'a>(script: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = SCRIPT_ARGS.iter().copied().map(OsString::from).collect();
+    inline_with_shell_args(script, SCRIPT_ARGS, args)
+}
+
+/// Builds `pwsh <shell_args> -Command <script> <args>`.
+///
+/// `shell_args` replaces the default `-NoLogo -NoProfile -ExecutionPolicy Bypass` prefix, and an empty list
+/// means no prefix; [`inline()`] is the default shape.
+pub fn inline_with_shell_args<'a, S, A>(script: &str, shell_args: S, args: A) -> Command
+where
+    S: IntoIterator<Item = &'a str>,
+    A: IntoIterator<Item = &'a str>,
+{
+    let mut all: Vec<OsString> = shell_args.into_iter().map(OsString::from).collect();
     all.push("-Command".into());
     all.push(script.into());
     all.extend(args.into_iter().map(OsString::from));
