@@ -52,8 +52,9 @@ pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command 
 
 /// Builds `lua -e <script> <args>`.
 ///
-/// An argument that looks like a Lua flag must come after the `-e` chunk, which this constructor
-/// already does by putting every caller argument last.
+/// Caller arguments are appended unchanged, and Lua may treat a non-option argument as a script
+/// filename to open, or consume a flag-like argument itself. Use [`file()`] to pass arguments to a
+/// script.
 pub fn inline<'a>(script: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
     let mut all: Vec<OsString> = vec!["-e".into(), script.into()];
     all.extend(args.into_iter().map(OsString::from));
