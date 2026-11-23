@@ -69,10 +69,11 @@ pub fn inline<'a>(
     script: &str,
     args: impl IntoIterator<Item = &'a str>,
 ) -> std::io::Result<Command> {
-    let source = if script.trim_start().starts_with("<?") {
-        script.to_owned()
+    let source = script.trim();
+    let source = if source.starts_with("<?") {
+        source.to_owned()
     } else {
-        format!("<?php\n{script}")
+        format!("<?php\n{source}")
     };
     let path = common::temp_file(&source, "php")?;
     let command = file_with(

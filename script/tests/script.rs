@@ -285,11 +285,16 @@ fn php_inline_adds_the_opening_tag_once() {
     assert!(stored.contains("echo 1;"));
     assert_eq!(stored.matches("<?php").count(), 1);
 
-    let command = php::inline("<?php echo 2;", []).expect("inline php");
+    let command = php::inline(" \n<?php echo 1;", []).expect("inline php");
     let temp = command.temp_file().expect("temp file");
     let stored = std::fs::read_to_string(temp).expect("read the temp file");
-    assert!(stored.starts_with("<?php echo 2;"));
+    assert!(stored.starts_with("<?php"));
     assert_eq!(stored.matches("<?php").count(), 1);
+
+    let command = php::inline("<?php echo 1;", []).expect("inline php");
+    let temp = command.temp_file().expect("temp file");
+    let stored = std::fs::read_to_string(temp).expect("read the temp file");
+    assert_eq!(stored, "<?php echo 1;");
 }
 
 #[test]
