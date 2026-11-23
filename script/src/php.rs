@@ -69,7 +69,7 @@ pub fn inline<'a>(
     script: &str,
     args: impl IntoIterator<Item = &'a str>,
 ) -> std::io::Result<Command> {
-    let source = script.trim();
+    let source = script.trim_start();
     let source = if source.starts_with("<?") {
         source.to_owned()
     } else {
