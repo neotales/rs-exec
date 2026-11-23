@@ -2,8 +2,8 @@
 
 use neotales_exec::{Command, which};
 use neotales_script::{
-    bash, bun, cmd, deno, dotnet, fish, golang, node, nushell, perl, php, powershell, pwsh, python,
-    ruby, sh, uv,
+    awk, bash, bun, cmd, dart, deno, dotnet, elixir, fish, golang, groovy, julia, lua, node,
+    nushell, perl, php, powershell, pwsh, python, r, racket, ruby, sh, tcl, uv, zsh,
 };
 
 fn args(command: &Command) -> Vec<String> {
@@ -316,4 +316,105 @@ fn nushell_runs_files_through_nu() {
     assert_eq!(args(&command), ["a.nu", "1"]);
     assert!(command.program().to_string_lossy().contains("nu"));
     assert!(nushell::script("print 1", []).is_ok());
+}
+
+#[test]
+fn zsh_puts_the_script_after_dash_c_and_a_placeholder() {
+    let command = zsh::inline("echo $1", ["hi"]);
+    let arguments = args(&command);
+
+    assert_eq!(
+        &arguments[arguments.len() - 4..],
+        ["-c", "echo $1", "zsh", "hi"]
+    );
+
+    let file = zsh::file("a.zsh", ["1"]);
+    assert_eq!(
+        args(&file),
+        ["--no-rcs", "-e", "-o", "pipefail", "a.zsh", "1"]
+    );
+}
+
+#[test]
+fn lua_passes_arguments_after_dash_e() {
+    assert_eq!(
+        args(&lua::inline("print(1)", ["a"])),
+        ["-e", "print(1)", "a"]
+    );
+    assert_eq!(args(&lua::file("a.lua", [])), ["a.lua"]);
+}
+
+#[test]
+fn r_runs_through_rscript_and_writes_inline_source() {
+    let command = r::file("a.R", ["1"]);
+    assert_eq!(args(&command), ["a.R", "1"]);
+    assert!(command.program().to_string_lossy().contains("Rscript"));
+
+    let command = r::inline("print(1)\n", []).expect("inline R");
+    assert!(command.temp_file().is_some());
+    assert!(command.program().to_string_lossy().contains("Rscript"));
+}
+
+#[test]
+fn julia_separates_arguments_with_a_double_dash() {
+    assert_eq!(
+        args(&julia::inline("println(1)", ["--help"])),
+        ["-e", "println(1)", "--", "--help"]
+    );
+    assert_eq!(args(&julia::script("a.jl", [])), ["a.jl"]);
+}
+
+#[test]
+fn elixir_separates_arguments_with_a_double_dash() {
+    assert_eq!(
+        args(&elixir::inline("IO.puts(1)", [])),
+        ["-e", "IO.puts(1)", "--"]
+    );
+}
+
+#[test]
+fn awk_uses_f_for_a_file_and_a_positional_program() {
+    assert_eq!(
+        args(&awk::file("a.awk", ["in.txt"])),
+        ["-f", "a.awk", "in.txt"]
+    );
+    assert_eq!(
+        args(&awk::inline("BEGIN { }", ["in.txt"])),
+        ["BEGIN { }", "in.txt"]
+    );
+}
+
+#[test]
+fn dart_runs_files_and_writes_inline_source() {
+    assert_eq!(args(&dart::file("a.dart", ["1"])), ["run", "a.dart", "1"]);
+
+    let command = dart::inline("void main() {}\n", []).expect("inline Dart");
+    let arguments = args(&command);
+    assert_eq!(arguments[0], "run");
+    assert!(command.temp_file().is_some());
+}
+
+#[test]
+fn tcl_runs_through_tclsh() {
+    let command = tcl::file("a.tcl", ["1"]);
+
+    assert_eq!(args(&command), ["a.tcl", "1"]);
+    assert!(command.program().to_string_lossy().contains("tclsh"));
+    assert!(tcl::inline("puts 1", []).is_ok());
+}
+
+#[test]
+fn groovy_separates_arguments_with_a_double_dash() {
+    assert_eq!(
+        args(&groovy::inline("println 1", ["-h"])),
+        ["-e", "println 1", "--", "-h"]
+    );
+}
+
+#[test]
+fn racket_separates_arguments_with_a_double_dash() {
+    assert_eq!(
+        args(&racket::inline("(+ 1 1)", ["--help"])),
+        ["-e", "(+ 1 1)", "--", "--help"]
+    );
 }

@@ -57,8 +57,9 @@ let output = bash::inline("echo hi", [])
 assert_eq!(output.text().trim(), "hi");
 ```
 
-**Pass source to Python, Ruby, Perl, or Deno.** Each one has its own inline flag, and Perl keeps a
-`--` so a leading dash reaches `@ARGV` instead of perl itself.
+**Pass source on the runtime's own flag.** Python, Ruby, Deno, Lua, Julia, Elixir, Groovy, Racket,
+and zsh take it there, and Perl keeps a `--` so a leading dash reaches `@ARGV` instead of perl
+itself.
 
 ```rust
 use neotales_script::{perl, python};
@@ -70,9 +71,9 @@ let command = perl::inline("print 1", ["-n"]);
 assert_eq!(command.arguments(), ["-e", "print 1", "--", "-n"]);
 ```
 
-**Run inline Go and .NET source.** `golang::inline` and `dotnet::inline` write the source to a
-fresh private file in the user's directory, then run it. The command records the path, and
-the file stays there.
+**Run inline Go, .NET, Dart, R, and Tcl source.** `golang::inline`, `dotnet::inline`,
+`dart::inline`, `r::inline`, and `tcl::inline` write the source to a fresh private file in the
+user's directory, then run it. The command records the path, and the file stays there.
 
 On Windows, privacy relies on the per-user `LocalAppData` directory and reparse-point refusal, not a custom ACL.
 
@@ -86,11 +87,12 @@ let cs = dotnet::inline("System.Console.WriteLine(1);", []).unwrap();
 assert!(cs.temp_file().is_some());
 ```
 
-**Runtime modules.** `bash`, `sh`, `node`, `bun`, `deno`, `golang`, `dotnet`, `powershell`, `pwsh`,
-`cmd`, `python`, `ruby`, `perl`, `uv`, `php`, `fish`, and `nushell`. Each one resolves its
-executable through `neotales_exec::find`, so an environment variable such as `RUN_NODE_EXE`
-overrides the search, and a missing runtime falls back to the bare program name. The `nushell`
-module runs the `nu` executable.
+**Runtime modules.** `bash`, `sh`, `zsh`, `fish`, `node`, `bun`, `deno`, `golang`, `dotnet`,
+`powershell`, `pwsh`, `cmd`, `python`, `ruby`, `perl`, `lua`, `uv`, `php`, `julia`, `elixir`,
+`groovy`, `racket`, `dart`, `r`, `tcl`, `awk`, and `nushell`. Each one resolves its executable
+through `neotales_exec::find`, so an environment variable such as `RUN_NODE_EXE` overrides the
+search, and a missing runtime falls back to the bare program name. Three modules run an executable
+with a different name: `nushell` runs `nu`, `r` runs `Rscript`, and `tcl` runs `tclsh`.
 
 ## Licence
 

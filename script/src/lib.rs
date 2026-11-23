@@ -12,14 +12,20 @@
 //! program.
 #![doc = include_str!("../README.md")]
 
+pub mod awk;
 pub mod bash;
 pub mod bun;
 pub mod cmd;
 mod common;
+pub mod dart;
 pub mod deno;
 pub mod dotnet;
+pub mod elixir;
 pub mod fish;
 pub mod golang;
+pub mod groovy;
+pub mod julia;
+pub mod lua;
 pub mod node;
 pub mod nushell;
 pub mod perl;
@@ -27,6 +33,10 @@ pub mod php;
 pub mod powershell;
 pub mod pwsh;
 pub mod python;
+pub mod r;
+pub mod racket;
 pub mod ruby;
 pub mod sh;
+pub mod tcl;
 pub mod uv;
+pub mod zsh;
