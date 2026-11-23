@@ -80,14 +80,18 @@ fn private_directory() -> io::Result<PathBuf> {
     }
 }
 
+#[cfg(unix)]
 fn create_directory(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+
     let mut builder = DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    builder.mode(0o700);
     builder.create(path)
+}
+
+#[cfg(not(unix))]
+fn create_directory(path: &Path) -> io::Result<()> {
+    DirBuilder::new().create(path)
 }
 
 fn environment_directory(key: &str) -> io::Result<PathBuf> {

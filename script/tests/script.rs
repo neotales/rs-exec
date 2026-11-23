@@ -1,7 +1,10 @@
 //! The argument vectors each runtime builds.
 
 use neotales_exec::{Command, which};
-use neotales_script::{bash, bun, cmd, dotnet, golang, node, powershell, pwsh, sh};
+use neotales_script::{
+    bash, bun, cmd, deno, dotnet, fish, golang, node, nushell, perl, php, powershell, pwsh, python,
+    ruby, sh, uv,
+};
 
 fn args(command: &Command) -> Vec<String> {
     command
@@ -208,4 +211,82 @@ fn sh_inline_executes_when_sh_exists() {
 
     let output = sh::inline("echo hi", []).output().expect("sh");
     assert_eq!(output.text().trim(), "hi");
+}
+
+#[test]
+fn deno_file_allows_everything_and_deno_inline_evals() {
+    assert_eq!(
+        args(&deno::file("app.ts", ["--x"])),
+        ["run", "-A", "app.ts", "--x"]
+    );
+    assert_eq!(
+        args(&deno::inline("console.log(1)", [])),
+        ["eval", "console.log(1)"]
+    );
+    assert_eq!(args(&deno::script("app.ts", [])), ["run", "-A", "app.ts"]);
+}
+
+#[test]
+fn python_passes_arguments_after_dash_c() {
+    assert_eq!(
+        args(&python::inline("print(1)", ["a"])),
+        ["-c", "print(1)", "a"]
+    );
+    assert_eq!(args(&python::script("app.py", [])), ["app.py"]);
+    assert!(
+        python::file("app.py", [])
+            .program()
+            .to_string_lossy()
+            .contains("python")
+    );
+}
+
+#[test]
+fn ruby_passes_arguments_after_dash_e() {
+    assert_eq!(args(&ruby::inline("puts 1", ["a"])), ["-e", "puts 1", "a"]);
+    assert_eq!(args(&ruby::file("a.rb", [])), ["a.rb"]);
+}
+
+#[test]
+fn perl_separates_arguments_with_a_double_dash() {
+    assert_eq!(
+        args(&perl::inline("print 1", ["-n"])),
+        ["-e", "print 1", "--", "-n"]
+    );
+    assert_eq!(args(&perl::inline("print 1", [])), ["-e", "print 1", "--"]);
+    assert_eq!(args(&perl::script("a.pl", [])), ["a.pl"]);
+}
+
+#[test]
+fn uv_runs_files_and_writes_inline_source() {
+    assert_eq!(args(&uv::file("app.py", ["a"])), ["run", "app.py", "a"]);
+
+    let command = uv::inline("print(1)\n", []).expect("inline uv");
+    let arguments = args(&command);
+    assert_eq!(arguments[0], "run");
+    assert!(command.temp_file().is_some());
+}
+
+#[test]
+fn php_runs_files_and_writes_inline_source() {
+    assert_eq!(args(&php::file("a.php", ["1"])), ["a.php", "1"]);
+
+    let command = php::inline("<?php echo 1;", []).expect("inline php");
+    let temp = command.temp_file().expect("temp file");
+    assert_eq!(args(&command), [temp.to_string_lossy().into_owned()]);
+}
+
+#[test]
+fn fish_runs_files() {
+    assert_eq!(args(&fish::file("a.fish", ["1"])), ["a.fish", "1"]);
+    assert!(fish::inline("echo 1", []).is_ok());
+}
+
+#[test]
+fn nushell_runs_files_through_nu() {
+    let command = nushell::file("a.nu", ["1"]);
+
+    assert_eq!(args(&command), ["a.nu", "1"]);
+    assert!(command.program().to_string_lossy().contains("nu"));
+    assert!(nushell::script("print 1", []).is_ok());
 }

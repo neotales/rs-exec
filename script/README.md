@@ -57,6 +57,19 @@ let output = bash::inline("echo hi", [])
 assert_eq!(output.text().trim(), "hi");
 ```
 
+**Pass source to Python, Ruby, Perl, or Deno.** Each one has its own inline flag, and Perl keeps a
+`--` so a leading dash reaches `@ARGV` instead of perl itself.
+
+```rust
+use neotales_script::{perl, python};
+
+let command = python::inline("print(1)", ["a"]);
+assert_eq!(command.arguments(), ["-c", "print(1)", "a"]);
+
+let command = perl::inline("print 1", ["-n"]);
+assert_eq!(command.arguments(), ["-e", "print 1", "--", "-n"]);
+```
+
 **Run inline Go and .NET source.** `golang::inline` and `dotnet::inline` write the source to a
 fresh private file in the user's directory, then run it. The command records the path, and
 the file stays there.
@@ -73,10 +86,11 @@ let cs = dotnet::inline("System.Console.WriteLine(1);", []).unwrap();
 assert!(cs.temp_file().is_some());
 ```
 
-**Runtime modules.** `bash`, `sh`, `node`, `bun`, `golang`, `dotnet`, `powershell`, `pwsh`, and
-`cmd`. Each one resolves its executable through `neotales_exec::find`, so an environment variable
-such as `RUN_NODE_EXE` overrides the search, and a missing runtime falls back to the bare program
-name.
+**Runtime modules.** `bash`, `sh`, `node`, `bun`, `deno`, `golang`, `dotnet`, `powershell`, `pwsh`,
+`cmd`, `python`, `ruby`, `perl`, `uv`, `php`, `fish`, and `nushell`. Each one resolves its
+executable through `neotales_exec::find`, so an environment variable such as `RUN_NODE_EXE`
+overrides the search, and a missing runtime falls back to the bare program name. The `nushell`
+module runs the `nu` executable.
 
 ## Licence
 

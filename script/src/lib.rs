@@ -3,7 +3,9 @@
 //! Every module has the same four constructors: [`bash::new`] for a bare runtime with arguments,
 //! [`bash::file`] for a script path, [`bash::inline`] for source text, and [`bash::script`] for a
 //! string that may be either. Each returns an owned command, so the caller sets the working
-//! directory, the environment and a logger on it.
+//! directory, the environment and a logger on it. A runtime that cannot forward arguments through
+//! its inline flag writes the source to a private file first, so its `inline` and `script` return
+//! `io::Result<Command>`; every other constructor returns a `Command`.
 //!
 //! The runtime is resolved through [`neotales_exec::find`] on first use. When it is not installed,
 //! the command carries the bare name (`bash`, `node`, `go`) and the spawn reports the missing
@@ -14,9 +16,17 @@ pub mod bash;
 pub mod bun;
 pub mod cmd;
 mod common;
+pub mod deno;
 pub mod dotnet;
+pub mod fish;
 pub mod golang;
 pub mod node;
+pub mod nushell;
+pub mod perl;
+pub mod php;
 pub mod powershell;
 pub mod pwsh;
+pub mod python;
+pub mod ruby;
 pub mod sh;
+pub mod uv;
