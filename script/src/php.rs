@@ -1,6 +1,6 @@
 //! PHP commands.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::sync::Once;
 
 use neotales_exec::{Command, Executable, register};
@@ -43,16 +43,24 @@ pub fn new<'a>(args: impl IntoIterator<Item = &'a str>) -> Command {
 
 /// Builds `php <path> <args>`.
 pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = vec![path.into()];
-    all.extend(args.into_iter().map(OsString::from));
+    file_with(
+        OsStr::new(path),
+        args.into_iter().map(OsString::from).collect(),
+    )
+}
+
+fn file_with(path: &OsStr, args: Vec<OsString>) -> Command {
+    let mut all: Vec<OsString> = vec![path.to_os_string()];
+    all.extend(args);
     build(all)
 }
 
 /// Writes `script` to a private `.php` file and builds `php <file> <args>`.
 ///
 /// `php -r` does not put the caller's arguments in `$argv`, so the source is materialised and run
-/// as a file. The file is left in place, and the path is recorded on the command for
-/// [`Command::temp_file`].
+/// as a file. Source without an opening `<?` tag gets `<?php` prepended, because a `.php` file
+/// without a tag is printed instead of run. The file is left in place, and the path is recorded on
+/// the command for [`Command::temp_file`].
 ///
 /// # Errors
 ///
@@ -61,9 +69,17 @@ pub fn inline<'a>(
     script: &str,
     args: impl IntoIterator<Item = &'a str>,
 ) -> std::io::Result<Command> {
-    let path = common::temp_file(script, "php")?;
-    let argument = path.to_string_lossy().into_owned();
-    Ok(file(&argument, args).with_temp_file(path))
+    let source = if script.trim_start().starts_with("<?") {
+        script.to_owned()
+    } else {
+        format!("<?php\n{script}")
+    };
+    let path = common::temp_file(&source, "php")?;
+    let command = file_with(
+        path.as_os_str(),
+        args.into_iter().map(OsString::from).collect(),
+    );
+    Ok(command.with_temp_file(path))
 }
 
 /// Runs `text` as a file when it is one line ending in `.php`, and inline otherwise.

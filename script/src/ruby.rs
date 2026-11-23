@@ -50,7 +50,8 @@ pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command 
 
 /// Builds `ruby -e <script> <args>`.
 ///
-/// No `$0` placeholder is inserted: Ruby puts the first caller argument in `ARGV`.
+/// No `$0` placeholder is inserted, but Ruby reads a caller argument that looks like an
+/// interpreter flag before it reaches `ARGV`, so use [`file()`] to pass such an argument through.
 pub fn inline<'a>(script: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
     let mut all: Vec<OsString> = vec!["-e".into(), script.into()];
     all.extend(args.into_iter().map(OsString::from));

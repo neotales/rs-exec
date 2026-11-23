@@ -1,6 +1,6 @@
 //! uv commands.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::sync::Once;
 
 use neotales_exec::{Command, Executable, register};
@@ -48,8 +48,15 @@ pub fn new<'a>(args: impl IntoIterator<Item = &'a str>) -> Command {
 
 /// Builds `uv run <path> <args>`.
 pub fn file<'a>(path: &str, args: impl IntoIterator<Item = &'a str>) -> Command {
-    let mut all: Vec<OsString> = vec!["run".into(), path.into()];
-    all.extend(args.into_iter().map(OsString::from));
+    file_with(
+        OsStr::new(path),
+        args.into_iter().map(OsString::from).collect(),
+    )
+}
+
+fn file_with(path: &OsStr, args: Vec<OsString>) -> Command {
+    let mut all: Vec<OsString> = vec!["run".into(), path.to_os_string()];
+    all.extend(args);
     build(all)
 }
 
@@ -66,8 +73,11 @@ pub fn inline<'a>(
     args: impl IntoIterator<Item = &'a str>,
 ) -> std::io::Result<Command> {
     let path = common::temp_file(script, "py")?;
-    let argument = path.to_string_lossy().into_owned();
-    Ok(file(&argument, args).with_temp_file(path))
+    let command = file_with(
+        path.as_os_str(),
+        args.into_iter().map(OsString::from).collect(),
+    );
+    Ok(command.with_temp_file(path))
 }
 
 /// Runs `text` as a file when it is one line ending in `.py`, and inline otherwise.

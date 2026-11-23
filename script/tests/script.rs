@@ -277,6 +277,22 @@ fn php_runs_files_and_writes_inline_source() {
 }
 
 #[test]
+fn php_inline_adds_the_opening_tag_once() {
+    let command = php::inline("echo 1;", []).expect("inline php");
+    let temp = command.temp_file().expect("temp file");
+    let stored = std::fs::read_to_string(temp).expect("read the temp file");
+    assert!(stored.starts_with("<?php\n"));
+    assert!(stored.contains("echo 1;"));
+    assert_eq!(stored.matches("<?php").count(), 1);
+
+    let command = php::inline("<?php echo 2;", []).expect("inline php");
+    let temp = command.temp_file().expect("temp file");
+    let stored = std::fs::read_to_string(temp).expect("read the temp file");
+    assert!(stored.starts_with("<?php echo 2;"));
+    assert_eq!(stored.matches("<?php").count(), 1);
+}
+
+#[test]
 fn fish_runs_files() {
     assert_eq!(args(&fish::file("a.fish", ["1"])), ["a.fish", "1"]);
     assert!(fish::inline("echo 1", []).is_ok());
