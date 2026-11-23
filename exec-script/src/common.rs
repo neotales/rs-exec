@@ -59,7 +59,7 @@ fn random_name() -> io::Result<String> {
 fn private_directory() -> io::Result<PathBuf> {
     let base = private_base()?;
     loop {
-        let path = base.join(format!("neotales-script-{}", random_name()?));
+        let path = base.join(format!("neotales-exec-script-{}", random_name()?));
         match create_directory(&path) {
             Ok(()) => {
                 #[cfg(unix)]
@@ -153,7 +153,7 @@ fn private_base_in(home: &Path) -> io::Result<PathBuf> {
     for ancestor in home.ancestors().skip(1) {
         verify_ancestor(&std::fs::symlink_metadata(ancestor)?)?;
     }
-    let base = home.join(".neotales-script");
+    let base = home.join(".neotales-exec-script");
     ensure_private_directory(&base)?;
     Ok(base)
 }
@@ -186,7 +186,7 @@ fn verify_ancestor(metadata: &std::fs::Metadata) -> io::Result<()> {
 fn private_base() -> io::Result<PathBuf> {
     let local = environment_directory("LOCALAPPDATA")?;
     refuse_reparse_points(&local)?;
-    let base = local.join("neotales-script");
+    let base = local.join("neotales-exec-script");
     match create_directory(&base) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
@@ -269,14 +269,14 @@ mod tests {
         std::os::unix::fs::symlink("missing", &cache).unwrap();
         assert_eq!(
             private_base_in(&home).unwrap(),
-            home.join(".neotales-script")
+            home.join(".neotales-exec-script")
         );
         std::fs::remove_file(&cache).unwrap();
         create_directory(&cache).unwrap();
         std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o770)).unwrap();
         assert_eq!(
             private_base_in(&home).unwrap(),
-            home.join(".neotales-script")
+            home.join(".neotales-exec-script")
         );
         std::fs::remove_dir_all(home).unwrap();
     }

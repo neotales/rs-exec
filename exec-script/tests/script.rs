@@ -1,7 +1,7 @@
 //! The argument vectors each runtime builds.
 
 use neotales_exec::{Command, which};
-use neotales_script::{
+use neotales_exec_script::{
     awk, bash, bun, cmd, dart, deno, dotnet, elixir, fish, golang, groovy, julia, lua, node,
     nushell, perl, php, powershell, pwsh, python, r, racket, ruby, sh, tcl, uv, zsh,
 };

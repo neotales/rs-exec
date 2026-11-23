@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["exec", "script"]
+members = ["exec", "exec-script"]
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

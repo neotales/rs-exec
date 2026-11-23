@@ -8,9 +8,9 @@ name: release
 # crates.io cannot bootstrap a crate this way. The first publish of a new crate
 # is manual, through ~/work/rs/publish.sh. See RELEASE.md.
 #
-# The two crates are not independent. `neotales-script` names `neotales-exec` as
+# The two crates are not independent. `neotales-exec-script` names `neotales-exec` as
 # a version dependency, so exec must reach crates.io first and every later
-# upload of script needs that exact exec version to be visible.
+# upload of exec-script needs that exact exec version to be visible.
 #
 # The publish job sets no GitHub environment on purpose. The trusted publisher
 # saved on crates.io for this organisation has an empty environment, and
@@ -70,7 +70,7 @@ jobs:
         run: cargo doc --workspace --all-features --no-deps
 
       # A manual dry run packages neotales-exec only. Packaging
-      # neotales-script rewrites the path dependency to
+      # neotales-exec-script rewrites the path dependency to
       # `neotales-exec = "<version>"`, so the dry run can only pass once that
       # version exists on crates.io; it starts after the first manual exec
       # upload. A tag run adds it when the exec version is already published,
@@ -83,7 +83,7 @@ jobs:
           cargo publish -p neotales-exec --dry-run --locked
 
           if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
-            echo "manual run: neotales-script is packaged once neotales-exec is on crates.io"
+            echo "manual run: neotales-exec-script is packaged once neotales-exec is on crates.io"
             exit 0
           fi
 
@@ -100,9 +100,9 @@ jobs:
             "https://crates.io/api/v1/crates/neotales-exec/${version}" || echo 000)
 
           if [ "$code" = "200" ]; then
-            cargo publish -p neotales-script --dry-run --locked
+            cargo publish -p neotales-exec-script --dry-run --locked
           else
-            echo "neotales-exec ${version} is not on crates.io yet; skipping the script dry run"
+            echo "neotales-exec ${version} is not on crates.io yet; skipping the exec-script dry run"
           fi
 
   version:
@@ -125,7 +125,7 @@ jobs:
 
           manifests = {
               "neotales-exec": "exec/Cargo.toml",
-              "neotales-script": "script/Cargo.toml",
+              "neotales-exec-script": "exec-script/Cargo.toml",
           }
 
           versions = {}
@@ -194,11 +194,11 @@ jobs:
       # each matching crate id on that token. A missing config rejects that
       # crate only; do not treat that as index lag.
       #
-      # The order matters: `neotales-script` depends on `neotales-exec` by
-      # version, so exec goes first and the index has to carry it before script
+      # The order matters: `neotales-exec-script` depends on `neotales-exec` by
+      # version, so exec goes first and the index has to carry it before exec-script
       # is accepted. A re-run skips a version already on crates.io. Do not
       # republish, and do not delete or move the tag.
-      - name: Publish neotales-exec, then neotales-script
+      - name: Publish neotales-exec, then neotales-exec-script
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
@@ -234,7 +234,7 @@ jobs:
             cargo publish -p "$package" --locked
           }
 
-          # exec first: script's packaged manifest names it by version, and cargo
+          # exec first: exec-script's packaged manifest names it by version, and cargo
           # will reject the upload while that version is absent from the index.
           publish_crate neotales-exec exec/Cargo.toml
-          publish_crate neotales-script script/Cargo.toml
+          publish_crate neotales-exec-script exec-script/Cargo.toml

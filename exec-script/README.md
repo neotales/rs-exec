@@ -1,4 +1,4 @@
-# neotales-script
+# neotales-exec-script
 
 Builds `neotales-exec` commands for script runtimes.
 
@@ -11,7 +11,7 @@ By [x0craft](https://github.com/x0craft).
 ## Install 📦
 
 ```sh
-cargo add neotales-script
+cargo add neotales-exec-script
 ```
 
 ## What you can do 🧰
@@ -22,7 +22,7 @@ piece of source, so the caller never spells out `-c`, `--file`, or `run`. `bash:
 `$1`.
 
 ```rust
-use neotales_script::{bash, node};
+use neotales_exec_script::{bash, node};
 
 let command = bash::inline("echo hi", []);
 assert_eq!(command.arguments()[4], "-c");
@@ -35,7 +35,7 @@ assert_eq!(command.arguments(), ["app.js", "--watch"]);
 as a file and runs anything else inline. A line with a `\n` in it is always source.
 
 ```rust
-use neotales_script::{bash, cmd, golang};
+use neotales_exec_script::{bash, cmd, golang};
 
 assert_eq!(bash::script("build.sh", []).arguments()[4], "build.sh");
 assert_eq!(bash::script("echo hi", []).arguments()[5], "echo hi");
@@ -47,7 +47,7 @@ assert_eq!(golang::script("main.go", []).unwrap().arguments()[1], "main.go");
 so the working directory, the environment, and the logger are set on the same chain.
 
 ```rust,no_run
-use neotales_script::bash;
+use neotales_exec_script::bash;
 
 let output = bash::inline("echo hi", [])
     .current_dir(".")
@@ -62,7 +62,7 @@ and zsh take it there, and Perl keeps a `--` so a leading dash reaches `@ARGV` i
 itself.
 
 ```rust
-use neotales_script::{perl, python};
+use neotales_exec_script::{perl, python};
 
 let command = python::inline("print(1)", ["a"]);
 assert_eq!(command.arguments(), ["-c", "print(1)", "a"]);
@@ -78,7 +78,7 @@ user's directory, then run it. The command records the path, and the file stays 
 On Windows, privacy relies on the per-user `LocalAppData` directory and reparse-point refusal, not a custom ACL.
 
 ```rust
-use neotales_script::{dotnet, golang};
+use neotales_exec_script::{dotnet, golang};
 
 let go = golang::inline("package main\nfunc main() {}\n", []).unwrap();
 assert!(go.temp_file().is_some());

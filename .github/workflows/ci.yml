@@ -1,7 +1,7 @@
 name: ci
 
 # One repository, a virtual workspace with two crates: `exec/` is
-# `neotales-exec` and `script/` is `neotales-script`. The virtual manifest means
+# `neotales-exec` and `exec-script/` is `neotales-exec-script`. The virtual manifest means
 # Cargo's default members are every member, so no command needs `--workspace` to
 # reach both crates.
 

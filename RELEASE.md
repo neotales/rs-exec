@@ -7,33 +7,33 @@ with a short-lived crates.io token obtained over OIDC. There is no
 ## The version rule
 
 The tag is `v` plus the version in the manifests. Tag `v0.0.0-alpha.1` publishes
-the crates only if `exec/Cargo.toml` and `script/Cargo.toml` both say
+the crates only if `exec/Cargo.toml` and `exec-script/Cargo.toml` both say
 `version = "0.0.0-alpha.1"`. The `version` job fails the run when they differ
 from each other or from the tag, so a tag can never publish a version that
 differs from what is in the tree.
 
 This repository ships two crates that share the tag: `neotales-exec` from
-`exec/` and `neotales-script` from `script/`. Unlike a pair of independent
-crates, the order is not a matter of taste: `script/Cargo.toml` names
+`exec/` and `neotales-exec-script` from `exec-script/`. Unlike a pair of independent
+crates, the order is not a matter of taste: `exec-script/Cargo.toml` names
 `neotales-exec = { path = "../exec", version = "..." }`, and packaging rewrites
 that path to the registry version. The publish job uploads `neotales-exec`
-first, then `neotales-script`.
+first, then `neotales-exec-script`.
 
 The path is what the workspace builds against. The version is what the packaged
-manifest carries, so a caller who adds `neotales-script` gets `neotales-exec`
+manifest carries, so a caller who adds `neotales-exec-script` gets `neotales-exec`
 from crates.io at the same version.
 
 ## Dry runs and the dependency
 
-`cargo publish -p neotales-script --dry-run --locked` fails until that exact
+`cargo publish -p neotales-exec-script --dry-run --locked` fails until that exact
 `neotales-exec` version is on crates.io, because cargo resolves the rewritten
 version dependency against the index. The pre-publish check therefore packages
-`neotales-exec` on every trigger, and packages `neotales-script` only when it
+`neotales-exec` on every trigger, and packages `neotales-exec-script` only when it
 can already succeed:
 
 - `workflow_dispatch` packages `neotales-exec` only. Do not read a skipped
   script dry run as a pass.
-- A tag run packages `neotales-script` when the exec version it names is already
+- A tag run packages `neotales-exec-script` when the exec version it names is already
   on crates.io, which is the re-run case. On the first run for a new version the
   exec upload happens later in that same run, so the check skips it.
 
@@ -51,7 +51,7 @@ The tag uploads both crates, in this order, and neither upload is optional:
 
 ```sh
 cargo publish -p neotales-exec --locked
-cargo publish -p neotales-script --locked
+cargo publish -p neotales-exec-script --locked
 ```
 
 The one exception is a new crate's first version, which is uploaded by hand and
@@ -73,15 +73,15 @@ the crate repository: it is how the first version of every crate is uploaded,
 not part of any one crate.
 
 1. Set `version = "0.0.0-alpha.0"` in `exec/Cargo.toml` and
-   `script/Cargo.toml`, commit it, and leave the working tree clean. Do not
+   `exec-script/Cargo.toml`, commit it, and leave the working tree clean. Do not
    publish from a tree with uncommitted changes.
-2. Run the script with `exec` first. `script` names `neotales-exec` as a version
+2. Run the script with `exec` first. `exec-script` names `neotales-exec` as a version
    dependency, so its upload is rejected while `neotales-exec = "0.0.0-alpha.0"`
    is not on crates.io.
 
    ```sh
    ~/work/rs/publish.sh exec
-   ~/work/rs/publish.sh script
+   ~/work/rs/publish.sh exec-script
    ```
 
    The script reads the token itself and passes it to `cargo` through the
@@ -118,7 +118,7 @@ at `~/work/rs/README.STYLE.md` and is not part of a crate.
 2. Push the commit.
 3. Tag it `vX.Y.Z` and push the tag.
 4. The workflow runs the checks, packages `neotales-exec`, and then publishes
-   `neotales-exec` followed by `neotales-script`. One OIDC exchange covers both
+   `neotales-exec` followed by `neotales-exec-script`. One OIDC exchange covers both
    crates when each has a trusted publisher for this repository, `release.yml`,
    and an empty environment. A re-run skips a version already on crates.io. Do
    not republish it, and do not delete or move the tag.
@@ -139,7 +139,7 @@ cannot publish these crates later.
 - No publishing from a branch. The tag check exists so the artifact has a name.
 - No republishing a version. crates.io rejects it. If a publish fails after the
   upload was accepted, bump the patch version and release again.
-- No publishing `neotales-script` before `neotales-exec` at the same version.
+- No publishing `neotales-exec-script` before `neotales-exec` at the same version.
 
 ## Failure modes
 
@@ -148,5 +148,5 @@ cannot publish these crates later.
 | `version` job: tag does not match `vX.Y.Z` | `Cargo.toml` version and the tag disagree. Delete the tag, fix, re-tag. |
 | Publish job: OIDC exchange fails | The crate does not exist yet, or the trusted publisher does not match: wrong repository, wrong workflow filename, or an environment name that is set on one side and not the other. |
 | Publish job: version already uploaded | The version was published before, usually by the manual first release. Bump the version. |
-| Publish job: no matching package named `neotales-exec` | `neotales-script` was uploaded before the exec version it names reached the index. Publish exec, wait for the index, then script. |
+| Publish job: no matching package named `neotales-exec` | `neotales-exec-script` was uploaded before the exec version it names reached the index. Publish exec, wait for the index, then exec-script. |
 | Publish job: `cargo publish` rejects the token | Trusted Publishing Only mode is on and the crate has no trusted publisher configured. |
